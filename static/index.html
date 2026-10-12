@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Desk Engineer - AI Hardware Diagnostics & Repair</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #151d30;
+      --border: #23314d;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --pass: #22c55e;
+      --fail: #ef4444;
+      --warning: #f59e0b;
+      --solution-bg: #064e3b;
+      --solution-border: #059669;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+    body {
+      background: var(--bg);
+      color: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem;
+      width: 100%;
+      max-width: 820px;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+    }
+
+    .stage-container {
+      position: relative;
+      width: 100%;
+      min-height: 420px;
+      background: #020617;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #imagePreview, #cameraVideo {
+      max-width: 100%;
+      max-height: 420px;
+      object-fit: contain;
+      display: block;
+    }
+
+    #overlayCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .placeholder-text { color: #64748b; font-size: 15px; }
+
+    .btn-group {
+      margin-top: 1.25rem;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button, label.file-btn {
+      flex: 1;
+      min-width: 160px;
+      padding: 13px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-size: 14px;
+      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button:hover, label.file-btn:hover { background: var(--accent-hover); }
+    button.primary { background: #059669; }
+    button.primary:hover { background: #047857; }
+    button.secondary { background: #475569; }
+    button.secondary:hover { background: #334155; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    input[type="file"] { display: none; }
+
+    .results {
+      margin-top: 1.5rem;
+      padding: 1.25rem;
+      background: #1e293b;
+      border-radius: 10px;
+      display: none;
+    }
+
+    .verdict-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 0.75rem;
+    }
+
+    .badge {
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+    }
+    .badge.PASS { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; }
+    .badge.FAIL { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+
+    .defect-card {
+      background: #0f172a;
+      border-left: 4px solid var(--fail);
+      padding: 12px 16px;
+      margin-top: 12px;
+      border-radius: 4px 8px 8px 4px;
+    }
+    .defect-card.WARNING { border-left-color: var(--warning); }
+    .defect-title { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+    .defect-desc { color: #cbd5e1; font-size: 13px; line-height: 1.4; margin-bottom: 8px; }
+
+    .solution-box {
+      background: rgba(6, 78, 59, 0.35);
+      border: 1px solid var(--solution-border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+      color: #6ee7b7;
+      display: flex;
+      gap: 6px;
+      align-items: flex-start;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>🔬 Desk Engineer: AI Diagnostics & Repair Guide</h2>
+    <p style="color: #94a3b8; font-size: 14px; margin-top: 4px; margin-bottom: 1.25rem;">
+      Upload a schematic or PCB photo to automatically identify bugs, view bounding boxes, and get instant repair solutions.
+    </p>
+
+    <div class="stage-container" id="stage">
+      <span class="placeholder-text" id="placeholder">Upload an image or start camera feed</span>
+      <video id="cameraVideo" autoplay playsinline style="display:none;"></video>
+      <img id="imagePreview" style="display:none;" />
+      <canvas id="overlayCanvas"></canvas>
+    </div>
+
+    <canvas id="snapshotCanvas" style="display:none;"></canvas>
+
+    <div class="btn-group">
+      <label class="file-btn">
+        📁 Upload File
+        <input type="file" id="fileInput" accept="image/*">
+      </label>
+      <button id="startCamBtn">📷 Start Camera</button>
+      <button id="inspectBtn" class="primary" disabled>Inspect & Diagnose ⚡</button>
+    </div>
+
+    <div class="results" id="resultBox">
+      <div class="verdict-header">
+        <div>
+          <h3>Verdict: <span id="verdictBadge" class="badge"></span></h3>
+          <p id="summaryText" style="color: #94a3b8; font-size: 14px; margin-top: 4px;"></p>
+        </div>
+        <button id="downloadPdfBtn" class="secondary" style="flex:0 0 auto; padding: 8px 14px; font-size: 13px;">
+          📄 Download PDF
+        </button>
+      </div>
+
+      <div style="margin-top: 1rem;" id="defectContainer"></div>
+    </div>
+  </div>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const imagePreview = document.getElementById('imagePreview');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const overlayCanvas = document.getElementById('overlayCanvas');
+    const placeholder = document.getElementById('placeholder');
+    const fileInput = document.getElementById('fileInput');
+    const startCamBtn = document.getElementById('startCamBtn');
+    const inspectBtn = document.getElementById('inspectBtn');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    const resultBox = document.getElementById('resultBox');
+    const verdictBadge = document.getElementById('verdictBadge');
+    const summaryText = document.getElementById('summaryText');
+    const defectContainer = document.getElementById('defectContainer');
+    const snapshotCanvas = document.getElementById('snapshotCanvas');
+
+    let currentSource = null;
+    let selectedFileBlob = null;
+    let cameraStream = null;
+    let lastInspectionData = null;
+
+    function clearOverlay() {
+      const ctx = overlayCanvas.getContext('2d');
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
+
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+        startCamBtn.innerText = "📷 Start Camera";
+      }
+
+      selectedFileBlob = file;
+      currentSource = 'file';
+      clearOverlay();
+
+      imagePreview.src = URL.createObjectURL(file);
+      imagePreview.style.display = 'block';
+      cameraVideo.style.display = 'none';
+      placeholder.style.display = 'none';
+      inspectBtn.disabled = false;
+      resultBox.style.display = 'none';
+    };
+
+    startCamBtn.onclick = async () => {
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        cameraVideo.srcObject = cameraStream;
+        cameraVideo.style.display = 'block';
+        imagePreview.style.display = 'none';
+        placeholder.style.display = 'none';
+        currentSource = 'camera';
+        clearOverlay();
+        inspectBtn.disabled = false;
+        startCamBtn.innerText = "📷 Camera Active";
+        resultBox.style.display = 'none';
+      } catch (err) {
+        alert("Camera error: " + err.message);
+      }
+    };
+
+    function speakVerdict(verdict, summary) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const message = new SpeechSynthesisUtterance();
+      message.rate = 1.0;
+      message.text = verdict === 'PASS' 
+        ? "Inspection Passed. Circuit design and components verified."
+        : `Inspection Failed. Defect detected: ${summary}. Solutions generated on screen.`;
+      window.speechSynthesis.speak(message);
+    }
+
+    function drawBoundingBoxes(defects) {
+      const activeEl = currentSource === 'file' ? imagePreview : cameraVideo;
+      overlayCanvas.width = activeEl.clientWidth;
+      overlayCanvas.height = activeEl.clientHeight;
+
+      const ctx = overlayCanvas.getContext('2d');
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+      if (!defects || defects.length === 0) return;
+
+      defects.forEach((d) => {
+        if (!d.box_2d || d.box_2d.length !== 4) return;
+        const [ymin, xmin, ymax, xmax] = d.box_2d;
+
+        const x = (xmin / 1000) * overlayCanvas.width;
+        const y = (ymin / 1000) * overlayCanvas.height;
+        const width = ((xmax - xmin) / 1000) * overlayCanvas.width;
+        const height = ((ymax - ymin) / 1000) * overlayCanvas.height;
+
+        ctx.strokeStyle = d.severity === 'WARNING' ? '#f59e0b' : '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, width, height);
+
+        ctx.fillStyle = d.severity === 'WARNING' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(239, 68, 68, 0.18)';
+        ctx.fillRect(x, y, width, height);
+
+        ctx.fillStyle = d.severity === 'WARNING' ? '#f59e0b' : '#ef4444';
+        ctx.font = 'bold 12px sans-serif';
+        const labelText = ` ${d.component} `;
+        const textWidth = ctx.measureText(labelText).width;
+        ctx.fillRect(x, Math.max(0, y - 18), textWidth + 4, 18);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(labelText, x + 2, Math.max(14, y - 4));
+      });
+    }
+
+    inspectBtn.onclick = async () => {
+      inspectBtn.disabled = true;
+      inspectBtn.innerText = "Diagnosing Circuit...";
+      clearOverlay();
+
+      let blobToSend = null;
+
+      if (currentSource === 'file') {
+        blobToSend = selectedFileBlob;
+      } else if (currentSource === 'camera') {
+        snapshotCanvas.width = cameraVideo.videoWidth || 640;
+        snapshotCanvas.height = cameraVideo.videoHeight || 480;
+        const ctx = snapshotCanvas.getContext('2d');
+        ctx.drawImage(cameraVideo, 0, 0);
+        blobToSend = await new Promise(r => snapshotCanvas.toBlob(r, 'image/jpeg'));
+      }
+
+      if (!blobToSend) {
+        alert("Please provide an image first.");
+        inspectBtn.disabled = false;
+        inspectBtn.innerText = "Inspect & Diagnose ⚡";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", blobToSend, "inspection.jpg");
+
+      try {
+        const res = await fetch("/inspect", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        lastInspectionData = data;
+
+        resultBox.style.display = "block";
+        verdictBadge.innerText = data.status || "REPORT";
+        verdictBadge.className = "badge " + (data.status === "PASS" ? "PASS" : "FAIL");
+        summaryText.innerText = data.summary || "Inspection complete.";
+
+        defectContainer.innerHTML = "";
+        if (data.defects && data.defects.length > 0) {
+          data.defects.forEach(d => {
+            const card = document.createElement("div");
+            card.className = `defect-card ${d.severity || 'CRITICAL'}`;
+            card.innerHTML = `
+              <div class="defect-title">${d.component} <span style="font-size:11px;opacity:0.8;">[${d.severity}]</span></div>
+              <div class="defect-desc">${d.issue}</div>
+              ${d.solution ? `
+                <div class="solution-box">
+                  <span>💡</span>
+                  <div><b>Fix:</b> ${d.solution}</div>
+                </div>
+              ` : ''}
+            `;
+            defectContainer.appendChild(card);
+          });
+        } else {
+          defectContainer.innerHTML = "<p style='color:#4ade80;'>No assembly or schematic defects detected.</p>";
+        }
+
+        setTimeout(() => drawBoundingBoxes(data.defects), 100);
+        speakVerdict(data.status, data.summary);
+
+      } catch (err) {
+        alert("Server communication error: " + err.message);
+      } finally {
+        inspectBtn.disabled = false;
+        inspectBtn.innerText = "Inspect & Diagnose ⚡";
+      }
+    };
+
+    downloadPdfBtn.onclick = () => {
+      if (!lastInspectionData) return;
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text("DESK ENGINEER: DIAGNOSTIC & REPAIR REPORT", 14, 20);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 27);
+      doc.text("AI Automated Schematic & Hardware Fault Analysis", 14, 32);
+
+      doc.setDrawColor(200);
+      doc.line(14, 36, 196, 36);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(lastInspectionData.status === "PASS" ? 34 : 220, lastInspectionData.status === "PASS" ? 197 : 38, 38);
+      doc.text(`STATUS: ${lastInspectionData.status}`, 14, 46);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(40);
+      const splitSummary = doc.splitTextToSize(`Summary: ${lastInspectionData.summary}`, 180);
+      doc.text(splitSummary, 14, 54);
+
+      let currentY = 54 + (splitSummary.length * 6) + 6;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      doc.text("Itemized Defects & Recommended Solutions:", 14, currentY);
+      currentY += 8;
+
+      if (lastInspectionData.defects && lastInspectionData.defects.length > 0) {
+        lastInspectionData.defects.forEach((d, idx) => {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(d.severity === "WARNING" ? 180 : 200, 30, 30);
+          doc.text(`${idx + 1}. [${d.severity}] ${d.component}`, 16, currentY);
+          currentY += 5;
+
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(70);
+          const splitIssue = doc.splitTextToSize(`Issue: ${d.issue}`, 175);
+          doc.text(splitIssue, 20, currentY);
+          currentY += (splitIssue.length * 5) + 3;
+
+          if (d.solution) {
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(5, 150, 105);
+            const splitSol = doc.splitTextToSize(`Fix: ${d.solution}`, 175);
+            doc.text(splitSol, 20, currentY);
+            currentY += (splitSol.length * 5) + 4;
+          }
+        });
+      }
+
+      doc.save(`DeskEngineer_Diagnostics_${Date.now()}.pdf`);
+    };
+
+    window.onresize = () => {
+      if (lastInspectionData && lastInspectionData.defects) {
+        drawBoundingBoxes(lastInspectionData.defects);
+      }
+    };
+  </script>
+</body>
+</html>
