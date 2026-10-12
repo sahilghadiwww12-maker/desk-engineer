@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 
 app = FastAPI()
+app.mount("/", StaticFiles(directory="static", html=True), name="static")            
 
 app.add_middleware(
     CORSMiddleware,
