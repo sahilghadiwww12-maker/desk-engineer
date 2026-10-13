@@ -115,7 +115,7 @@ async def inspect_board(file: UploadFile = File(...)):
         ]
     }
 
- app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 async def serve_home():
