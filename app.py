@@ -4,6 +4,7 @@ import json
 import re
 import time
 from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -114,7 +115,12 @@ async def inspect_board(file: UploadFile = File(...)):
         ]
     }
 
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
+ app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def serve_home():
+    return FileResponse("static/index.html")
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
