@@ -10,8 +10,7 @@ from PIL import Image
 from google import genai
 from google.genai import types
 
-app = FastAPI()
-app.mount("/", StaticFiles(directory="static", html=True), name="static")            
+app = FastAPI()           
 
 app.add_middleware(
     CORSMiddleware,
@@ -115,6 +114,8 @@ async def inspect_board(file: UploadFile = File(...)):
         ]
     }
 
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
