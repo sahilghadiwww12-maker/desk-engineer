@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 # ⚠️ Paste your Gemini API key here
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6K5b1c_VliIFzsr4ekLN9UJoyGdGeGaTJYh237VT_7buQ")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """
